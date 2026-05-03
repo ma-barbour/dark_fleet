@@ -204,6 +204,7 @@
     </div>
 </div>
 
+<!-- overlay-screen is visible on load -->
 <div id="overlay-screen" class="fixed inset-0 bg-slate-950/95 z-50 flex flex-col items-center justify-start p-6 text-center overflow-y-auto">
     <div class="max-w-md w-full flex flex-col items-center py-8">
         <h1 id="overlay-title" class="glow-title text-5xl font-black text-white italic tracking-tighter mb-8">DARK FLEET</h1>
@@ -237,6 +238,7 @@
     const btnAmmoEl = document.getElementById('btn-ammo-count');
     const critWarning = document.getElementById('critical-warning');
     const denseNotice = document.getElementById('dense-notice');
+    const overlayScreen = document.getElementById('overlay-screen');
     
     const SCROLL_SPEED_START = 1.8;
     const LASER_SPEED = 20;
@@ -317,6 +319,20 @@
         }
     }
 
+    function createShipDestruction(x, y) {
+        const colors = ['#38bdf8', '#f59e0b']; // Ship Blue and Flame Orange
+        for(let i = 0; i < 150; i++) {
+            entities.particles.push({
+                x, y, 
+                vx: -6 - Math.random() * 25, // Blown strongly to the left
+                vy: (Math.random() - 0.5) * 15,
+                life: 1.0, 
+                decay: 0.003 + Math.random() * 0.01, 
+                color: colors[Math.floor(Math.random() * colors.length)]
+            });
+        }
+    }
+
     async function syncLeaderboard() {
         const listContainer = document.getElementById('leaderboard-content');
         try {
@@ -372,57 +388,95 @@
     }
 
     function update() {
-        if(!game.running) return;
-        game.time++;
         const speedMult = game.spreadTime > 0 ? 1.3 : 1.0;
-        game.scrollSpeed = SCROLL_SPEED_START + (game.time / 15000);
 
-        if (!game.denseTriggered && game.time > 8500) {
-            game.denseTriggered = true;
-            denseNotice.style.opacity = '1';
-            setTimeout(() => { denseNotice.style.opacity = '0'; }, 3000);
+        if (game.running) {
+            game.time++;
+            game.scrollSpeed = SCROLL_SPEED_START + (game.time / 15000);
+
+            if (!game.denseTriggered && game.time > 8500) {
+                game.denseTriggered = true;
+                denseNotice.style.opacity = '1';
+                setTimeout(() => { denseNotice.style.opacity = '0'; }, 3000);
+            }
+
+            const ease = 0.12;
+            ship.x += (game.targetX - ship.x) * ease;
+            ship.y += (game.targetY - ship.y) * ease;
+
+            if (ship.x < ship.radius) ship.x = ship.radius;
+            if (ship.x > canvas.width - ship.radius) ship.x = canvas.width - ship.radius;
+            if (ship.y < ship.radius) ship.y = ship.radius;
+            if (ship.y > canvas.height - ship.radius) ship.y = canvas.height - ship.radius;
+
+            if (ship.invincible > 0) ship.invincible--;
+            if (ship.cooldown > 0) ship.cooldown--;
+            if (game.spreadTime > 0) game.spreadTime--;
+            if (ship.glow > 0) ship.glow -= 0.035;
+
+            if (game.time % 14 === 0) {
+                if (game.spreadTime > 0) {
+                    fireLaser('#38bdf8', 1, false, 0); fireLaser('#60a5fa', 1, false, -0.22); fireLaser('#60a5fa', 1, false, 0.22);    
+                } else { fireLaser('#38bdf8', 1, false, 0); }
+            }
+
+            if (Math.random() < 0.012 + (game.time / 80000)) spawnAsteroid();
         }
 
-        const ease = 0.12;
-        ship.x += (game.targetX - ship.x) * ease;
-        ship.y += (game.targetY - ship.y) * ease;
-
-        if (ship.x < ship.radius) ship.x = ship.radius;
-        if (ship.x > canvas.width - ship.radius) ship.x = canvas.width - ship.radius;
-        if (ship.y < ship.radius) ship.y = ship.radius;
-        if (ship.y > canvas.height - ship.radius) ship.y = canvas.height - ship.radius;
-
-        if (ship.invincible > 0) ship.invincible--;
-        if (ship.cooldown > 0) ship.cooldown--;
-        if (game.spreadTime > 0) game.spreadTime--;
-        if (ship.glow > 0) ship.glow -= 0.035;
-
-        if (game.time % 14 === 0) {
-            if (game.spreadTime > 0) {
-                fireLaser('#38bdf8', 1, false, 0); fireLaser('#60a5fa', 1, false, -0.22); fireLaser('#60a5fa', 1, false, 0.22);    
-            } else { fireLaser('#38bdf8', 1, false, 0); }
-        }
-
+        // ALWAYS UPDATE (Movement & Cleanup)
+        
+        // Stars
         entities.stars.forEach(s => { s.x -= s.speed * (game.scrollSpeed * 0.15) * speedMult; if (s.x < 0) s.x = canvas.width; });
-        if (Math.random() < 0.012 + (game.time / 80000)) spawnAsteroid();
 
+        // Lasers (Bullets should keep running off screen)
+        for (let i = entities.lasers.length - 1; i >= 0; i--) {
+            const l = entities.lasers[i];
+            l.x += l.vx * speedMult; 
+            l.y += l.vy * speedMult; 
+            let hit = false;
+            
+            // Only process collisions if game is active
+            if (game.running) {
+                for (let j = entities.asteroids.length - 1; j >= 0; j--) {
+                    const a = entities.asteroids[j];
+                    if (Math.hypot(l.x - a.x, l.y - a.y) < a.radius + 8) { 
+                        if (l.isHeavy) a.health = 0; else { a.health -= l.power; hit = true; }
+                        if (a.health <= 0) {
+                            const clr = a.bonusType === 1 ? '#fbbf24' : (a.bonusType === 2 ? '#f43f5e' : (a.bonusType === 3 ? '#3b82f6' : '#475569'));
+                            createExplosion(a.x, a.y, clr, 12); game.score += 20; if (a.bonusType > 0) spawnBonus(a.x, a.y, a.bonusType); entities.asteroids.splice(j, 1);
+                        }
+                        if (!l.isHeavy) break;
+                    }
+                }
+            }
+            
+            if ((!l.isHeavy && hit) || l.x > canvas.width + 100 || l.x < -100 || l.y < -100 || l.y > canvas.height + 50) {
+                entities.lasers.splice(i, 1);
+            }
+        }
+
+        // Asteroids (Keep drifting even after game over)
         for (let i = entities.asteroids.length - 1; i >= 0; i--) {
             const a = entities.asteroids[i];
             a.x += a.vx * speedMult; a.y += a.vy * speedMult; a.angle += a.rotSpeed * speedMult;
-            if (a.x < -a.radius - 50) { entities.asteroids.splice(i, 1); continue; }
-            if (ship.invincible <= 0) {
+            
+            if (game.running && ship.invincible <= 0) {
                 if (Math.hypot(ship.x - a.x, ship.y - a.y) < a.radius + ship.radius - 4) {
                     createExplosion(ship.x, ship.y, '#f43f5e', 30);
                     game.lives--; ship.invincible = 120; game.spreadTime = 0; entities.asteroids.splice(i, 1);
                     if (game.lives <= 0) endGame();
+                    continue;
                 }
             }
+            
+            if (a.x < -a.radius - 50) entities.asteroids.splice(i, 1);
         }
 
+        // Bonuses
         for (let i = entities.bonuses.length - 1; i >= 0; i--) {
             const b = entities.bonuses[i];
             b.x += b.vx * speedMult; b.angle += 0.06 * speedMult;
-            if (Math.hypot(ship.x - b.x, ship.y - b.y) < b.radius + ship.radius + 40) { 
+            if (game.running && Math.hypot(ship.x - b.x, ship.y - b.y) < b.radius + ship.radius + 40) { 
                 let pColor = "";
                 if (b.type === 1) { game.ammo += 5; ship.glow = 1.0; ship.glowColor = '#fbbf24'; pColor = '#fbbf24'; }
                 else if (b.type === 2) { if (game.lives < 5) game.lives++; ship.glow = 1.0; ship.glowColor = '#f43f5e'; pColor = '#f43f5e'; }
@@ -432,47 +486,31 @@
             if (b.x < -50) entities.bonuses.splice(i, 1);
         }
 
-        for (let i = entities.lasers.length - 1; i >= 0; i--) {
-            const l = entities.lasers[i];
-            l.x += l.vx * speedMult; l.y += l.vy * speedMult; let hit = false;
-            for (let j = entities.asteroids.length - 1; j >= 0; j--) {
-                const a = entities.asteroids[j];
-                if (Math.hypot(l.x - a.x, l.y - a.y) < a.radius + 8) { 
-                    if (l.isHeavy) a.health = 0; else { a.health -= l.power; hit = true; }
-                    if (a.health <= 0) {
-                        const clr = a.bonusType === 1 ? '#fbbf24' : (a.bonusType === 2 ? '#f43f5e' : (a.bonusType === 3 ? '#3b82f6' : '#475569'));
-                        createExplosion(a.x, a.y, clr, 12); game.score += 20; if (a.bonusType > 0) spawnBonus(a.x, a.y, a.bonusType); entities.asteroids.splice(j, 1);
-                    }
-                    if (!l.isHeavy) break;
-                }
-            }
-            if ((!l.isHeavy && hit) || l.x > canvas.width + 100 || l.x < -100 || l.y < -100 || l.y > canvas.height + 50) entities.lasers.splice(i, 1);
-        }
-
+        // Particles
         for (let i = entities.particles.length - 1; i >= 0; i--) {
-            const p = entities.particles[i]; p.x += (p.vx - game.scrollSpeed) * speedMult; p.y += p.vy * speedMult; p.life -= p.decay;
+            const p = entities.particles[i]; p.x += (p.vx - (game.running ? game.scrollSpeed : 1.0)) * speedMult; p.y += p.vy * speedMult; p.life -= p.decay;
             if (p.life <= 0) entities.particles.splice(i, 1);
         }
 
+        // Floating Text
         for (let i = entities.floatingTexts.length - 1; i >= 0; i--) {
-            const t = entities.floatingTexts[i]; t.y -= 1.5; t.x -= game.scrollSpeed * speedMult; t.life -= t.decay;
+            const t = entities.floatingTexts[i]; t.y -= 1.5; t.x -= (game.running ? game.scrollSpeed : 1.0) * speedMult; t.life -= t.decay;
             if (t.life <= 0) entities.floatingTexts.splice(i, 1);
         }
 
-        draw(); updateUI(); requestAnimationFrame(update);
+        draw(); 
+        updateUI(); 
+        requestAnimationFrame(update);
     }
 
     function draw() {
-        // REVERSED: Deep space is now pure black
         ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "white"; entities.stars.forEach(s => { ctx.globalAlpha = 0.4 + (s.speed / 4); ctx.fillRect(s.x, s.y, s.size, s.size); });
         ctx.globalAlpha = 1.0;
+
         entities.asteroids.forEach(a => {
             ctx.save(); ctx.translate(a.x, a.y); ctx.rotate(a.angle); 
-            
-            // REVERSED: Asteroid is now the lighter gray-blue color
             ctx.fillStyle = '#111827'; 
-            
             let color = "#334155";
             if (a.bonusType > 0 && a.bonusType !== 3) {
                 const pulse = 0.5 + Math.sin(game.time * 0.1) * 0.5;
@@ -486,6 +524,7 @@
             }
             ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
         });
+
         entities.bonuses.forEach(b => {
             ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.angle);
             let color = b.type === 1 ? "#fbbf24" : (b.type === 2 ? "#f43f5e" : "#3b82f6");
@@ -495,6 +534,7 @@
             else if (b.type === 3) { ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(8, 6); ctx.lineTo(-8, 6); ctx.closePath(); ctx.fill(); ctx.strokeStyle = "white"; ctx.stroke(); }
             ctx.restore();
         });
+
         entities.lasers.forEach(l => {
             ctx.save(); ctx.shadowBlur = l.isHeavy ? 35 : 10; ctx.shadowColor = l.color;
             const h = l.isHeavy ? 12 : 5; const w = l.isHeavy ? 70 : 25;
@@ -502,10 +542,12 @@
             if (l.isHeavy) { ctx.fillStyle = "#fff"; ctx.fillRect(l.x + 5, l.y - h/6, w - 10, h/3); }
             ctx.restore();
         });
+
         if (ship.glow > 0) {
             ctx.save(); ctx.beginPath(); ctx.arc(ship.x, ship.y, ship.radius + (1 - ship.glow) * 120, 0, Math.PI * 2); ctx.strokeStyle = ship.glowColor; ctx.lineWidth = 10 * ship.glow; ctx.globalAlpha = ship.glow * 0.6; ctx.stroke(); ctx.restore();
         }
-        if (ship.invincible % 10 < 5) {
+
+        if (game.running && ship.invincible % 10 < 5) {
             ctx.save(); ctx.translate(ship.x, ship.y);
             const engines = game.spreadTime > 0 ? {c:'#f59e0b', s:20, sc:'#ea580c', l:45} : {c:'#f59e0b', s:0, sc:'', l:20};
             ctx.fillStyle = engines.c; ctx.shadowBlur = engines.s; ctx.shadowColor = engines.sc;
@@ -522,6 +564,7 @@
             ctx.font = "8px monospace"; ctx.textAlign = "center"; ctx.fillStyle = "rgba(244, 63, 94, 0.5)"; ctx.fillText("▮".repeat(Math.max(0, game.lives)), 0, 22);
             ctx.restore();
         }
+
         entities.particles.forEach(p => { ctx.globalAlpha = p.life; ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 4, 4); });
         ctx.font = "bold 14px monospace"; ctx.textAlign = "center";
         entities.floatingTexts.forEach(t => { ctx.globalAlpha = t.life; ctx.fillStyle = t.color; ctx.fillText(t.text, t.x, t.y); });
@@ -538,7 +581,6 @@
         document.getElementById('ships-lost-hud').innerText = game.shipsLost.toString();
         btnAmmoEl.innerText = game.ammo;
 
-        // EMERGENCY WARNING Logic
         const lowHealth = game.lives <= 2;
         const lowAmmo = game.ammo <= 2;
 
@@ -557,29 +599,38 @@
     }
 
     function endGame() {
+        createShipDestruction(ship.x, ship.y);
         game.running = false;
-        game.shipsLost++;
-        game.finalScore = game.score; 
-        updateUI();
+        
         heavyBtn.classList.add('hidden');
-        document.getElementById('overlay-screen').classList.remove('hidden');
-        document.getElementById('overlay-title').innerText = "DARK SHIP LOST";
-        document.getElementById('btn-action').innerText = "SEND ANOTHER DARK SHIP";
-        let qualifies = false;
-        if (game.topScores.length < 10) { qualifies = true; } 
-        else {
-            const minScore = Math.min(...game.topScores.map(s => s.score));
-            if (game.finalScore > minScore) { qualifies = true; }
-        }
-        if (qualifies && game.finalScore > 0) {
-            document.getElementById('submission-panel').classList.remove('hidden');
-            const submitBtn = document.getElementById('btn-submit');
-            submitBtn.disabled = false;
-            submitBtn.innerText = "SAVE";
-        } else {
-            document.getElementById('submission-panel').classList.add('hidden');
-        }
-        syncLeaderboard();
+        critWarning.classList.add('hidden');
+
+        setTimeout(() => {
+            game.shipsLost++;
+            game.finalScore = game.score; 
+            updateUI();
+            
+            overlayScreen.classList.remove('hidden');
+            document.getElementById('overlay-title').innerText = "DARK SHIP LOST";
+            document.getElementById('btn-action').innerText = "SEND ANOTHER DARK SHIP";
+            
+            let qualifies = false;
+            if (game.topScores.length < 10) { qualifies = true; } 
+            else {
+                const minScore = Math.min(...game.topScores.map(s => s.score));
+                if (game.finalScore > minScore) { qualifies = true; }
+            }
+            
+            if (qualifies && game.finalScore > 0) {
+                document.getElementById('submission-panel').classList.remove('hidden');
+                const submitBtn = document.getElementById('btn-submit');
+                submitBtn.disabled = false;
+                submitBtn.innerText = "SAVE";
+            } else {
+                document.getElementById('submission-panel').classList.add('hidden');
+            }
+            syncLeaderboard();
+        }, 2000);
     }
 
     function startGame() {
@@ -590,11 +641,11 @@
         ship.x = 140; ship.y = canvas.height / 2; ship.glow = 0;
         entities = { asteroids: [], lasers: [], particles: [], stars: [], bonuses: [], floatingTexts: [] };
         initStars();
+        
         game.running = true;
         heavyBtn.classList.remove('hidden');
-        document.getElementById('overlay-screen').classList.add('hidden');
+        overlayScreen.classList.add('hidden');
         document.getElementById('submission-panel').classList.add('hidden');
-        requestAnimationFrame(update);
     }
 
     function toggleFullscreen() {
@@ -642,6 +693,9 @@
     }
     window.addEventListener('resize', resize);
     resize();
+    
+    // Initial loop start
+    requestAnimationFrame(update);
     setTimeout(syncLeaderboard, 1500);
 </script>
 </body>

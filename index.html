@@ -211,7 +211,7 @@
 </div>
 
 <script>
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbytc1M0ADrrnP9GwMsKcs1du-x4Ldi4-ByhKSfWjZYTmUs-33WLF_-bW0DN3y0TzcJB/exec";
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbygyzHuKJUz1SW7K2dnW3_OAP4ETMsTA0QNbgtMy2_Mw0umBag3wKG7Zz5YwSMLKNSC/exec";
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const container = document.getElementById('game-container');
@@ -346,7 +346,7 @@
         try {
             await fetch(SCRIPT_URL, {
                 method: 'POST',
-                mode: 'no-cors',
+                mode: 'no-cors', 
                 body: JSON.stringify({ 
                     player: playerName, 
                     score: game.finalScore,

@@ -211,7 +211,7 @@
 </div>
 
 <script>
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbygyzHuKJUz1SW7K2dnW3_OAP4ETMsTA0QNbgtMy2_Mw0umBag3wKG7Zz5YwSMLKNSC/exec";
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyGWK4hWfRhjtpuQz9l2JrCGmJd8_XnhP_ZU6_LEnaSxedztgs5gDvGWuj0B_4Gpp8A/exec";
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const container = document.getElementById('game-container');
@@ -321,7 +321,7 @@
                     <span class="opacity-50 text-center font-bold">#${s.rank}</span>
                     <div class="flex flex-col justify-center min-w-0">
                         <span class="truncate uppercase text-slate-100 font-bold">${s.player}</span>
-                        <span class="leaderboard-date">${formatDate(s.date)}</span>
+                        <span class="leaderboard-date">${s.date}</span>
                     </div>
                     <span class="text-right text-sky-400 font-bold">${s.score.toLocaleString()}</span>
                 </div>
@@ -339,6 +339,7 @@
         const dd = String(now.getDate()).padStart(2, '0');
         const mm = String(now.getMonth() + 1).padStart(2, '0');
         const yyyy = now.getFullYear();
+        // Construct the date string as DD/MM/YYYY
         const formattedDate = `${dd}/${mm}/${yyyy}`;
 
         document.getElementById('btn-submit').disabled = true;

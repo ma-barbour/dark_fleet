@@ -38,7 +38,7 @@
             position: relative;
             background-color: #020617;
             overflow: hidden;
-            /* Restrict touch only on the game area */
+            /* Precise touch control only in the game area */
             touch-action: none;
         }
 
@@ -114,7 +114,6 @@
             filter: drop-shadow(0 0 8px rgba(56,189,248,0.6));
         }
 
-        /* Leaderboard Rows */
         .leaderboard-row {
             display: grid;
             grid-template-columns: 35px 1fr 90px;
@@ -199,7 +198,7 @@
             </div>
         </div>
 
-        <button id="btn-action" class="px-14 py-4 bg-sky-500 hover:bg-sky-400 text-white font-black text-xl rounded-full transition-all shadow-[0_0_40px_rgba(14,165,233,0.4)] border-b-4 border-sky-800 active:translate-y-1 mb-12">ENTER ASTEROID FIELD</button>
+        <button id="btn-action" class="px-14 py-4 bg-sky-500 hover:bg-sky-400 text-white font-black text-xl rounded-full transition-all shadow-[0_0_40px_rgba(14,165_233,0.4)] border-b-4 border-sky-800 active:translate-y-1 mb-12">ENTER ASTEROID FIELD</button>
         
         <div id="leaderboard-panel" class="w-full max-w-xs p-4 bg-slate-900/50 border border-sky-500/20 rounded-lg">
             <h2 class="text-sky-500 font-bold text-[10px] tracking-[0.2em] uppercase mb-4 text-center">Top Fleet Pilots</h2>
@@ -211,7 +210,9 @@
 </div>
 
 <script>
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzNK9_OQdQsZydWZgSX3EfcwqlFEuT7SuRT0T92TG8xEOWGAD6FqATbEq7p9DPfWvis/exec";
+    // Updated Apps Script URL
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxp-ZeT-dIe4464EHxxEazP-iK4BIDo63IpTwJVP4U5dnTD-TELLte_1LCI9WP1ZWHR/exec";
+    
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const container = document.getElementById('game-container');
@@ -307,27 +308,36 @@
     }
 
     async function syncLeaderboard() {
+        const listContainer = document.getElementById('leaderboard-content');
         try {
-            const response = await fetch(SCRIPT_URL);
+            const response = await fetch(SCRIPT_URL, {
+                method: 'GET',
+                cache: 'no-cache',
+                redirect: 'follow'
+            });
+            
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const top10 = await response.json();
             game.topScores = top10;
-            const container = document.getElementById('leaderboard-content');
+            
             if (!top10 || top10.length === 0) {
-                container.innerHTML = '<div class="text-center py-2 opacity-30 italic">NO DATA IN ARCHIVE</div>';
+                listContainer.innerHTML = '<div class="text-center py-2 opacity-30 italic">NO DATA IN ARCHIVE</div>';
                 return;
             }
-            container.innerHTML = top10.map(s => `
+            
+            listContainer.innerHTML = top10.map(s => `
                 <div class="leaderboard-row">
                     <span class="opacity-50 text-center font-bold">#${s.rank}</span>
                     <div class="flex flex-col justify-center min-w-0">
                         <span class="truncate uppercase text-slate-100 font-bold">${s.player}</span>
-                        <span class="leaderboard-date">${s.date}</span>
+                        <span class="leaderboard-date">${formatDate(s.date)}</span>
                     </div>
                     <span class="text-right text-sky-400 font-bold">${s.score.toLocaleString()}</span>
                 </div>
             `).join('');
         } catch (e) {
             console.error("Archive sync error", e);
+            listContainer.innerHTML = '<div class="text-center py-2 opacity-40 italic text-rose-400">ARCHIVE OFFLINE</div>';
         }
     }
 
@@ -339,7 +349,7 @@
         const dd = String(now.getDate()).padStart(2, '0');
         const mm = String(now.getMonth() + 1).padStart(2, '0');
         const yyyy = now.getFullYear();
-        // Construct the date string as DD/MM/YYYY
+        // Send string as DD/MM/YYYY
         const formattedDate = `${dd}/${mm}/${yyyy}`;
 
         document.getElementById('btn-submit').disabled = true;
@@ -355,7 +365,7 @@
                 })
             });
             document.getElementById('submission-panel').classList.add('hidden');
-            setTimeout(syncLeaderboard, 1000);
+            setTimeout(syncLeaderboard, 1500);
         } catch (e) {
             console.error("Transmission failure", e);
         }
@@ -453,13 +463,12 @@
         entities.asteroids.forEach(a => {
             ctx.save(); ctx.translate(a.x, a.y); ctx.rotate(a.angle); ctx.fillStyle = '#020617'; 
             let color = "#334155";
-            
+            // Hide spread bonus (type 3) asteroids - they look normal
             if (a.bonusType > 0 && a.bonusType !== 3) {
                 const pulse = 0.5 + Math.sin(game.time * 0.1) * 0.5;
                 color = a.bonusType === 1 ? `rgba(251, 191, 36, ${0.5 + pulse * 0.5})` : `rgba(244, 63, 94, ${0.5 + pulse * 0.5})`;
                 ctx.shadowBlur = 10 * pulse; ctx.shadowColor = color;
             }
-            
             ctx.strokeStyle = color; ctx.lineWidth = (a.bonusType > 0 && a.bonusType !== 3) ? 2.5 : 1.2;
             ctx.beginPath(); for(let i=0; i<a.vertices.length; i++) {
                 const ang = (i / a.vertices.length) * Math.PI * 2; const r = a.radius * a.vertices[i];
@@ -525,22 +534,17 @@
         game.shipsLost++;
         game.finalScore = game.score; 
         updateUI();
-        
         heavyBtn.classList.add('hidden');
         document.getElementById('overlay-screen').classList.remove('hidden');
         document.getElementById('overlay-title').innerText = "DARK SHIP LOST";
         document.getElementById('btn-action').innerText = "SEND ANOTHER DARK SHIP";
         
         let qualifies = false;
-        if (game.topScores.length < 10) {
-            qualifies = true;
-        } else {
+        if (game.topScores.length < 10) { qualifies = true; } 
+        else {
             const minScore = Math.min(...game.topScores.map(s => s.score));
-            if (game.finalScore > minScore) {
-                qualifies = true;
-            }
+            if (game.finalScore > minScore) { qualifies = true; }
         }
-
         if (qualifies && game.finalScore > 0) {
             document.getElementById('submission-panel').classList.remove('hidden');
             document.getElementById('btn-submit').disabled = false;
@@ -548,7 +552,6 @@
         } else {
             document.getElementById('submission-panel').classList.add('hidden');
         }
-        
         syncLeaderboard();
     }
 
@@ -568,14 +571,12 @@
     function toggleFullscreen() {
         const doc = window.document;
         const docEl = doc.documentElement;
-
-        const requestFullScreen = docEl.requestFullscreen || docEl.mozRequestFullScreen || docEl.webkitRequestFullScreen || docEl.msRequestFullscreen;
-        const cancelFullScreen = doc.exitFullscreen || doc.mozCancelFullScreen || doc.webkitExitFullscreen || doc.msExitFullscreen;
-
+        const requestFS = docEl.requestFullscreen || docEl.mozRequestFullScreen || docEl.webkitRequestFullScreen || docEl.msRequestFullscreen;
+        const cancelFS = doc.exitFullscreen || doc.mozCancelFullScreen || doc.webkitExitFullscreen || doc.msExitFullscreen;
         if(!doc.fullscreenElement && !doc.mozFullScreenElement && !doc.webkitFullscreenElement && !doc.msFullscreenElement) {
-            if (requestFullScreen) requestFullScreen.call(docEl);
+            if (requestFS) requestFS.call(docEl);
         } else {
-            if (cancelFullScreen) cancelFullScreen.call(doc);
+            if (cancelFS) cancelFS.call(doc);
         }
     }
 
@@ -590,12 +591,7 @@
     };
 
     window.addEventListener('touchstart', handleInput);
-    window.addEventListener('touchmove', (e) => { 
-        if (game.running) {
-            e.preventDefault(); 
-            handleInput(e); 
-        }
-    }, { passive: false });
+    window.addEventListener('touchmove', (e) => { if (game.running) { e.preventDefault(); handleInput(e); } }, { passive: false });
     window.addEventListener('mousemove', (e) => { if (e.buttons > 0 && game.running) handleInput(e); });
     
     heavyBtn.addEventListener('touchstart', (e) => {
@@ -617,7 +613,7 @@
     }
     window.addEventListener('resize', resize);
     resize();
-    syncLeaderboard();
+    setTimeout(syncLeaderboard, 500);
 </script>
 </body>
 </html>

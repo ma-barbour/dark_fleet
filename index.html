@@ -21,7 +21,7 @@
         
         #command-header {
             height: 50px;
-            background: #020617;
+            background: #080e1b;
             border-bottom: 2px solid #1e293b;
             display: flex;
             justify-content: space-between;
@@ -36,7 +36,7 @@
         #game-container {
             flex-grow: 1;
             position: relative;
-            background-color: #020617;
+            background-color: #080e1b;
             overflow: hidden;
             touch-action: none;
         }
@@ -463,11 +463,11 @@
     }
 
     function draw() {
-        ctx.fillStyle = '#020617'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#080e1b'; ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "white"; entities.stars.forEach(s => { ctx.globalAlpha = 0.4 + (s.speed / 4); ctx.fillRect(s.x, s.y, s.size, s.size); });
         ctx.globalAlpha = 1.0;
         entities.asteroids.forEach(a => {
-            ctx.save(); ctx.translate(a.x, a.y); ctx.rotate(a.angle); ctx.fillStyle = '#020617'; 
+            ctx.save(); ctx.translate(a.x, a.y); ctx.rotate(a.angle); ctx.fillStyle = '#080e1b'; 
             let color = "#334155";
             if (a.bonusType > 0 && a.bonusType !== 3) {
                 const pulse = 0.5 + Math.sin(game.time * 0.1) * 0.5;

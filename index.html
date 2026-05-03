@@ -38,7 +38,6 @@
             position: relative;
             background-color: #020617;
             overflow: hidden;
-            /* Precise touch control only in the game area */
             touch-action: none;
         }
 
@@ -106,14 +105,6 @@
         
         .hidden { display: none !important; }
 
-        .rotate-icon {
-            width: 80px;
-            height: 80px;
-            margin-bottom: 20px;
-            stroke: #38bdf8;
-            filter: drop-shadow(0 0 8px rgba(56,189,248,0.6));
-        }
-
         .leaderboard-row {
             display: grid;
             grid-template-columns: 35px 1fr 90px;
@@ -148,23 +139,13 @@
 <body>
 
 <div id="orientation-warning">
-    <svg class="rotate-icon" viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="5" y="2" width="14" height="20" rx="2" ry="2" transform="rotate(90 12 12)" opacity="0.3"/>
-        <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
-        <path d="M12 15c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3"/>
-        <path d="M18 8a6 6 0 0 1 0 8" opacity="0.6"/>
-        <polyline points="15 6 18 8 15 10" opacity="0.6"/>
-    </svg>
     <h1 class="glow-title text-4xl font-black italic tracking-tighter uppercase">ROTATE YOUR PHONE</h1>
 </div>
 
 <div id="command-header">
-    <!-- Top Left: Fullscreen Toggle -->
     <div class="flex items-center">
         <button id="btn-fullscreen-hud" class="fs-btn">Fullscreen</button>
     </div>
-
-    <!-- Top Right: Score and Ships Lost -->
     <div class="flex gap-6 items-center">
         <div class="flex flex-col justify-center items-end">
             <span class="text-[10px] uppercase opacity-50 tracking-widest leading-tight">Score</span>
@@ -210,8 +191,7 @@
 </div>
 
 <script>
-    // Updated Apps Script URL
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxp-ZeT-dIe4464EHxxEazP-iK4BIDo63IpTwJVP4U5dnTD-TELLte_1LCI9WP1ZWHR/exec";
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwDf9rJIp3SPwjvd5BkOamL5RoO1VC_0wrscs4t8QS15nx3ow8DHTepRoqTnH2JOZP3/exec".trim();
     
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
@@ -297,31 +277,20 @@
         }
     }
 
-    function formatDate(dateStr) {
-        if (!dateStr) return "UNKNOWN";
-        const d = new Date(dateStr);
-        if (isNaN(d.getTime())) return dateStr;
-        const day = String(d.getDate()).padStart(2, '0');
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const year = d.getFullYear();
-        return `${day}/${month}/${year}`;
-    }
-
     async function syncLeaderboard() {
         const listContainer = document.getElementById('leaderboard-content');
         try {
-            const response = await fetch(SCRIPT_URL, {
-                method: 'GET',
-                cache: 'no-cache',
-                redirect: 'follow'
-            });
+            // Simplified fetch call to standard GAS endpoint
+            // No extra parameters or modes to ensure maximum compatibility with sandboxed origins
+            const response = await fetch(SCRIPT_URL);
             
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+            
             const top10 = await response.json();
             game.topScores = top10;
             
-            if (!top10 || top10.length === 0) {
-                listContainer.innerHTML = '<div class="text-center py-2 opacity-30 italic">NO DATA IN ARCHIVE</div>';
+            if (!top10 || top10.length === 0 || top10.error) {
+                listContainer.innerHTML = `<div class="text-center py-2 opacity-30 italic">${(top10 && top10.error) ? 'ARCHIVE ERROR' : 'NO DATA IN ARCHIVE'}</div>`;
                 return;
             }
             
@@ -330,13 +299,13 @@
                     <span class="opacity-50 text-center font-bold">#${s.rank}</span>
                     <div class="flex flex-col justify-center min-w-0">
                         <span class="truncate uppercase text-slate-100 font-bold">${s.player}</span>
-                        <span class="leaderboard-date">${formatDate(s.date)}</span>
+                        <span class="leaderboard-date">${s.date}</span>
                     </div>
                     <span class="text-right text-sky-400 font-bold">${s.score.toLocaleString()}</span>
                 </div>
             `).join('');
         } catch (e) {
-            console.error("Archive sync error", e);
+            console.error("Archive sync error:", e);
             listContainer.innerHTML = '<div class="text-center py-2 opacity-40 italic text-rose-400">ARCHIVE OFFLINE</div>';
         }
     }
@@ -349,25 +318,33 @@
         const dd = String(now.getDate()).padStart(2, '0');
         const mm = String(now.getMonth() + 1).padStart(2, '0');
         const yyyy = now.getFullYear();
-        // Send string as DD/MM/YYYY
         const formattedDate = `${dd}/${mm}/${yyyy}`;
 
-        document.getElementById('btn-submit').disabled = true;
-        document.getElementById('btn-submit').innerText = "...";
+        const saveBtn = document.getElementById('btn-submit');
+        saveBtn.disabled = true;
+        saveBtn.innerText = "...";
+        
         try {
+            // Send as plain text to avoid CORS preflight (OPTIONS) requests
+            // POST redirects are followed even in no-cors mode, which is ideal for GAS
             await fetch(SCRIPT_URL, {
                 method: 'POST',
                 mode: 'no-cors', 
+                headers: { 'Content-Type': 'text/plain' },
                 body: JSON.stringify({ 
                     player: playerName, 
                     score: game.finalScore,
                     date: formattedDate
                 })
             });
+            
             document.getElementById('submission-panel').classList.add('hidden');
-            setTimeout(syncLeaderboard, 1500);
+            // Give the Google Sheet a moment to process before refreshing leaderboard
+            setTimeout(syncLeaderboard, 2500);
         } catch (e) {
-            console.error("Transmission failure", e);
+            console.error("Transmission failure:", e);
+            saveBtn.disabled = false;
+            saveBtn.innerText = "RETRY";
         }
     }
 
@@ -463,7 +440,6 @@
         entities.asteroids.forEach(a => {
             ctx.save(); ctx.translate(a.x, a.y); ctx.rotate(a.angle); ctx.fillStyle = '#020617'; 
             let color = "#334155";
-            // Hide spread bonus (type 3) asteroids - they look normal
             if (a.bonusType > 0 && a.bonusType !== 3) {
                 const pulse = 0.5 + Math.sin(game.time * 0.1) * 0.5;
                 color = a.bonusType === 1 ? `rgba(251, 191, 36, ${0.5 + pulse * 0.5})` : `rgba(244, 63, 94, ${0.5 + pulse * 0.5})`;
@@ -547,8 +523,9 @@
         }
         if (qualifies && game.finalScore > 0) {
             document.getElementById('submission-panel').classList.remove('hidden');
-            document.getElementById('btn-submit').disabled = false;
-            document.getElementById('btn-submit').innerText = "SAVE";
+            const submitBtn = document.getElementById('btn-submit');
+            submitBtn.disabled = false;
+            submitBtn.innerText = "SAVE";
         } else {
             document.getElementById('submission-panel').classList.add('hidden');
         }
@@ -613,7 +590,7 @@
     }
     window.addEventListener('resize', resize);
     resize();
-    setTimeout(syncLeaderboard, 500);
+    setTimeout(syncLeaderboard, 1500);
 </script>
 </body>
 </html>
